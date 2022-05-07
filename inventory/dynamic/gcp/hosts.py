@@ -178,9 +178,7 @@ class GceInventory(object):
         # Set the instance_states filter based on config file options
         self.instance_states = []
         if config.has_option('gce', 'instance_states'):
-            states = config.get('gce', 'instance_states')
-            # Ignore if instance_states is an empty string.
-            if states:
+            if states := config.get('gce', 'instance_states'):
                 self.instance_states = states.split(',')
 
         return config
@@ -212,8 +210,7 @@ class GceInventory(object):
 
         if not secrets_found and secrets_path:
             if not secrets_path.endswith('secrets.py'):
-                err = "Must specify libcloud secrets file as "
-                err += "/absolute/path/to/secrets.py"
+                err = "Must specify libcloud secrets file as " + "/absolute/path/to/secrets.py"
                 sys.exit(err)
             sys.path.append(os.path.dirname(secrets_path))
             try:
@@ -238,9 +235,7 @@ class GceInventory(object):
 
         # Retrieve and return the GCE driver.
         gce = get_driver(Provider.GCE)(*args, **kwargs)
-        gce.connection.user_agent_append(
-            '%s/%s' % (USER_AGENT_PRODUCT, USER_AGENT_VERSION),
-        )
+        gce.connection.user_agent_append(f'{USER_AGENT_PRODUCT}/{USER_AGENT_VERSION}')
         return gce
 
     def parse_env_zones(self):
@@ -248,8 +243,8 @@ class GceInventory(object):
         If provided, this will be used to filter the results of the grouped_instances call'''
         import csv
         reader = csv.reader([os.environ.get('GCE_ZONE',"")], skipinitialspace=True)
-        zones = [r for r in reader]
-        return [z for z in zones[0]]
+        zones = list(reader)
+        return list(zones[0])
 
     def parse_cli_args(self):
         ''' Command line argument processing '''
@@ -315,9 +310,7 @@ class GceInventory(object):
     def group_instances(self, zones=None):
         '''Group all instances'''
         groups = {}
-        meta = {}
-        meta["hostvars"] = {}
-
+        meta = {"hostvars": {}}
         # list_nodes will fail if a disk is in the process of being deleted
         # from a node, which is not uncommon if other playbooks are managing
         # the same project. Retry if we receive a not found error.
@@ -343,7 +336,10 @@ class GceInventory(object):
             #
             # If the instance_states list is _populated_ then check the current
             # state against the instance_states list
-            if self.instance_states and not node.extra['status'] in self.instance_states:
+            if (
+                self.instance_states
+                and node.extra['status'] not in self.instance_states
+            ):
                 continue
 
             name = node.name
@@ -365,15 +361,12 @@ class GceInventory(object):
 
             tags = node.extra['tags']
             for t in tags:
-                if t.startswith('group-'):
-                    tag = t[6:]
-                else:
-                    tag = 'tag_%s' % t
+                tag = t[6:] if t.startswith('group-') else f'tag_{t}'
                 if groups.has_key(tag): groups[tag].append(name)
                 else: groups[tag] = [name]
 
             net = node.extra['networkInterfaces'][0]['network'].split('/')[-1]
-            net = 'network_%s' % net
+            net = f'network_{net}'
             if groups.has_key(net): groups[net].append(name)
             else: groups[net] = [name]
 
@@ -386,7 +379,7 @@ class GceInventory(object):
             else: groups[image] = [name]
 
             status = node.extra['status']
-            stat = 'status_%s' % status.lower()
+            stat = f'status_{status.lower()}'
             if groups.has_key(stat): groups[stat].append(name)
             else: groups[stat] = [name]
 

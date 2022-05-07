@@ -87,8 +87,9 @@ def check_swapon_status(module):
 
 def comment_swap_fstab(module):
     '''Comment out swap lines in /etc/fstab'''
-    res = subprocess.call(['sed', '-i.bak', 's/^[^#].*swap.*/#&/', '/etc/fstab'])
-    if res:
+    if res := subprocess.call(
+        ['sed', '-i.bak', 's/^[^#].*swap.*/#&/', '/etc/fstab']
+    ):
         result = {'failed': True,
                   'changed': False,
                   'msg': 'sed failed to comment swap in /etc/fstab',
@@ -98,12 +99,14 @@ def comment_swap_fstab(module):
 
 def run_swapoff(module, changed):
     '''Run swapoff command'''
-    res = subprocess.call(['swapoff', '--all'])
-    if res:
-        result = {'failed': True,
-                  'changed': changed,
-                  'msg': 'swapoff --all returned {}'.format(str(res)),
-                  'state': 'unknown'}
+    if res := subprocess.call(['swapoff', '--all']):
+        result = {
+            'failed': True,
+            'changed': changed,
+            'msg': f'swapoff --all returned {str(res)}',
+            'state': 'unknown',
+        }
+
         module.fail_json(**result)
 
 
