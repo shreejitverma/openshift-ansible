@@ -129,10 +129,7 @@ class HostGroup:
 
     def string(self):
         """Call the print method for each aggregated host; separated by newlines."""
-        infos = ""
-        for host in self.hosts:
-            infos += host.string() + "\n"
-        return infos
+        return "".join(host.string() + "\n" for host in self.hosts)
 
 
 class Host:
@@ -176,19 +173,19 @@ class Host:
         """Print an inventory-file compatible string with host information"""
         info = ""
         if self.alias:
-            info += self.alias + " "
+            info += f"{self.alias} "
         elif self.hostname:
-            info += self.hostname + " "
+            info += f"{self.hostname} "
         elif self.ip_addr:
-            info += self.ip_addr + " "
+            info += f"{self.ip_addr} "
         if self.ip_addr:
-            info += "openshift_ip=" + self.ip_addr + " "
+            info += f"openshift_ip={self.ip_addr} "
         if self.public_ip_addr:
-            info += "openshift_public_ip=" + self.public_ip_addr + " "
+            info += f"openshift_public_ip={self.public_ip_addr} "
         if self.hostname:
-            info += "openshift_kubelet_name_override=" + self.hostname + " "
+            info += f"openshift_kubelet_name_override={self.hostname} "
         if self.public_hostname:
-            info += "openshift_public_hostname=" + self.public_hostname
+            info += f"openshift_public_hostname={self.public_hostname}"
 
         return info
 
@@ -196,12 +193,10 @@ class Host:
 def parse_hostname(host):
     """Remove protocol and port from given hostname.
     Return parsed string"""
-    no_proto = re.split('^http(s)?\:\/\/', host)
-    if no_proto:
+    if no_proto := re.split('^http(s)?\:\/\/', host):
         host = no_proto[-1]
 
-    no_port = re.split('\:[0-9]+(/)?$', host)
-    if no_port:
+    if no_port := re.split('\:[0-9]+(/)?$', host):
         host = no_port[0]
 
     return host

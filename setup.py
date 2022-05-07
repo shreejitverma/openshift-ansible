@@ -61,9 +61,7 @@ def recursive_search(search_list, field):
                     fields_found.append(value)
                 elif isinstance(value, list):
                     results = recursive_search(value, field)
-                    for result in results:
-                        fields_found.append(result)
-
+                    fields_found.extend(iter(results))
     return fields_found
 
 
@@ -84,10 +82,7 @@ def find_playbooks(base_dir):
                 if 'include' in task or 'import_playbook' in task:
                     # Add the playbook and capture included playbooks
                     all_playbooks.add(yaml_file)
-                    if 'include' in task:
-                        directive = task['include']
-                    else:
-                        directive = task['import_playbook']
+                    directive = task['include'] if 'include' in task else task['import_playbook']
                     included_file_name = directive.split()[0]
                     included_file = os.path.normpath(
                         os.path.join(os.path.dirname(yaml_file),
@@ -234,12 +229,12 @@ class OpenShiftAnsibleSyntaxCheck(Command):
                     if '{{' in sub_item or '{%' in sub_item:
                         failed_items.append(sub_item)
 
-        if len(failed_items) > 0:
+        if failed_items:
             print('{}Error: Usage of Jinja2 templating delimiters in when '
                   'conditions is deprecated in Ansible 2.3.\n'
                   '  File: {}'.format(self.FAIL, yaml_file))
             for item in failed_items:
-                print('  Found: "{}"'.format(item))
+                print(f'  Found: "{item}"')
             print(self.ENDC)
             test_result = True
 
@@ -256,7 +251,7 @@ class OpenShiftAnsibleSyntaxCheck(Command):
                   'https://github.com/ansible/ansible/blob/devel/CHANGELOG.md\n'
                   '  File: {}'.format(self.FAIL, yaml_file))
             for item in search_results:
-                print('  Found: "include: {}"'.format(item))
+                print(f'  Found: "include: {item}"')
             print(self.ENDC)
             test_result = True
 
@@ -309,11 +304,13 @@ class OpenShiftAnsibleSyntaxCheck(Command):
                 continue
             invalid_include.append(playbook)
         if invalid_include:
-            print('{}Invalid included playbook(s) found. Please ensure'
-                  ' component entry point playbooks are not included{}'.format(self.FAIL, self.ENDC))
+            print(
+                f'{self.FAIL}Invalid included playbook(s) found. Please ensure component entry point playbooks are not included{self.ENDC}'
+            )
+
             invalid_include.sort()
             for playbook in invalid_include:
-                print('{}{}{}'.format(self.FAIL, playbook, self.ENDC))
+                print(f'{self.FAIL}{playbook}{self.ENDC}')
             has_errors = True
 
         if not has_errors:
@@ -323,17 +320,18 @@ class OpenShiftAnsibleSyntaxCheck(Command):
         print('Ansible Playbook Entry Point Syntax Checks')
         # Evaluate the difference between all playbooks and included playbooks
         entrypoint_playbooks = sorted(all_playbooks.difference(included_playbooks))
-        print('Entry point playbook count: {}'.format(len(entrypoint_playbooks)))
+        print(f'Entry point playbook count: {len(entrypoint_playbooks)}')
         for playbook in entrypoint_playbooks:
             print('-' * 60)
-            print('Syntax checking playbook: {}'.format(playbook))
+            print(f'Syntax checking playbook: {playbook}')
 
             # Error on any entry points in 'common' or 'private'
             invalid_entry_point = ('common', 'private')
             if any(x in playbook for x in invalid_entry_point):
-                print('{}Invalid entry point playbook or orphaned file. Entry'
-                      ' point playbooks are not allowed in \'common\' or'
-                      ' \'private\' directories{}'.format(self.FAIL, self.ENDC))
+                print(
+                    f"{self.FAIL}Invalid entry point playbook or orphaned file. Entry point playbooks are not allowed in 'common' or 'private' directories{self.ENDC}"
+                )
+
                 has_errors = True
 
             # --syntax-check each entry point playbook
@@ -343,8 +341,7 @@ class OpenShiftAnsibleSyntaxCheck(Command):
                     ['ansible-playbook', '--syntax-check', playbook]
                 )
             except subprocess.CalledProcessError as cpe:
-                print('{}Execution failed: {}{}'.format(
-                    self.FAIL, cpe, self.ENDC))
+                print(f'{self.FAIL}Execution failed: {cpe}{self.ENDC}')
                 has_errors = True
 
         if has_errors:
