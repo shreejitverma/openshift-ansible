@@ -77,12 +77,7 @@ def parse_subject_cn(subject_str):
 def csr_present_check(nodename, csr_dict):
     """Ensure node has a CSR
     Returns True if CSR for node is present"""
-    for _, val in csr_dict.items():
-        if val == nodename:
-            # CSR for node is present
-            return True
-    # Didn't find a CSR for node
-    return False
+    return any(val == nodename for _, val in csr_dict.items())
 
 
 class CSRapprove(object):  # pylint: disable=useless-object-inheritance
@@ -118,7 +113,7 @@ class CSRapprove(object):  # pylint: disable=useless-object-inheritance
     def get_nodes(self):
         """Get all nodes via oc get nodes -ojson"""
         # json output is necessary for consistency here.
-        command = "{} {} get nodes -ojson".format(self.oc_bin, self.kubeconfig)
+        command = f"{self.oc_bin} {self.kubeconfig} get nodes -ojson"
         stdout = self.run_command(command)
         try:
             data = json.loads(stdout)
@@ -132,7 +127,7 @@ class CSRapprove(object):  # pylint: disable=useless-object-inheritance
 
     def get_csrs(self):
         """Retrieve CSRs from cluster using oc get csr -ojson"""
-        command = "{} {} get csr -ojson".format(self.oc_bin, self.kubeconfig)
+        command = f"{self.oc_bin} {self.kubeconfig} get csr -ojson"
         stdout = self.run_command(command)
         try:
             data = json.loads(stdout)
@@ -178,7 +173,7 @@ class CSRapprove(object):  # pylint: disable=useless-object-inheritance
     def approve_csrs(self, csr_pending_list, mode):
         """Loop through csr_pending_list and call:
            oc adm certificate approve <item>"""
-        results_mode = "{}_approve_results".format(mode)
+        results_mode = f"{mode}_approve_results"
         base_command = "{} {} adm certificate approve {}"
         approve_results = []
         for csr in csr_pending_list:
@@ -191,7 +186,7 @@ class CSRapprove(object):  # pylint: disable=useless-object-inheritance
                 self.result[results_mode].extend(approve_results)
                 self.result['state'] = 'unknown'
                 self.module.fail_json(**self.result)
-            approve_results.append("{}: {}".format(csr_pending_list[csr], stdout))
+            approve_results.append(f"{csr_pending_list[csr]}: {stdout}")
         self.result[results_mode].extend(approve_results)
 
         # We set changed for approved client or server CSRs.
@@ -209,7 +204,7 @@ class CSRapprove(object):  # pylint: disable=useless-object-inheritance
 
     def runner(self, attempts, mode):
         """Approve CSRs if they are present for node"""
-        results_mode = "{}_approve_results".format(mode)
+        results_mode = f"{mode}_approve_results"
         # Get all CSRs, no good way to filter on pending.
         csrs = self.get_csrs()
         # process data in CSRs and build a dictionary of requests
@@ -218,23 +213,26 @@ class CSRapprove(object):  # pylint: disable=useless-object-inheritance
         if csr_present_check(self.nodename, csr_dict):
             # Approve outstanding CSRs for node
             self.approve_csrs(csr_dict, mode)
+        elif attempts < 36:  # 36 * 5 = 3 minutes waiting for CSRs
+            self.result[results_mode].append(
+                f"Attempt: {attempts}, Node {self.nodename} not present or CSR not yet available"
+            )
+
+            attempts += 1
+            time.sleep(5)
         else:
-            # CSR is not present, increment attempts and retry
-            if attempts < 36:  # 36 * 5 = 3 minutes waiting for CSRs
-                self.result[results_mode].append(
-                    "Attempt: {}, Node {} not present or CSR not yet available".format(attempts, self.nodename))
-                attempts += 1
-                time.sleep(5)
-            else:
                 # If attempts < 36, fail waiting for CSRs to appear
                 # Using 'describe' to have the API provide the decoded results for all CSRs
-                command = "{} {} describe csr".format(self.oc_bin, self.kubeconfig)
-                stdout = self.run_command(command)
-                self.result['failed'] = True
-                self.result['rc'] = 1
-                self.result['msg'] = "Node {} not present or could not find {} CSR".format(self.nodename, mode)
-                self.result['oc_describe_csr'] = stdout
-                self.module.fail_json(**self.result)
+            command = f"{self.oc_bin} {self.kubeconfig} describe csr"
+            stdout = self.run_command(command)
+            self.result['failed'] = True
+            self.result['rc'] = 1
+            self.result[
+                'msg'
+            ] = f"Node {self.nodename} not present or could not find {mode} CSR"
+
+            self.result['oc_describe_csr'] = stdout
+            self.module.fail_json(**self.result)
 
         return attempts
 
@@ -249,8 +247,10 @@ class CSRapprove(object):  # pylint: disable=useless-object-inheritance
             if self.nodename not in self.get_nodes():
                 attempts = self.runner(attempts, mode)
             else:
-                self.result["{}_approve_results".format(mode)].append(
-                    "Node {} is present in node list".format(self.nodename))
+                self.result[f"{mode}_approve_results"].append(
+                    f"Node {self.nodename} is present in node list"
+                )
+
                 break
 
         # # Server Cert Section # #
@@ -261,8 +261,10 @@ class CSRapprove(object):  # pylint: disable=useless-object-inheritance
             if not self.node_is_ready(self.nodename):
                 attempts = self.runner(attempts, mode)
             else:
-                self.result["{}_approve_results".format(mode)].append(
-                    "Node {} API is ready".format(self.nodename))
+                self.result[f"{mode}_approve_results"].append(
+                    f"Node {self.nodename} API is ready"
+                )
+
                 break
 
         self.module.exit_json(**self.result)
@@ -280,7 +282,7 @@ def run_module():
         argument_spec=module_args
     )
     oc_bin = module.params['oc_bin']
-    kubeconfig = '--kubeconfig={}'.format(module.params['kubeconfig'])
+    kubeconfig = f"--kubeconfig={module.params['kubeconfig']}"
     nodename = module.params['nodename']
 
     approver = CSRapprove(module, oc_bin, kubeconfig, nodename)
